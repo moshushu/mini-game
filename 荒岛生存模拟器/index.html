@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>荒岛生存模拟器</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- 顶部状态栏 -->
+        <header id="status-bar">
+            <div class="status-item" data-tooltip="生命值：代表你的健康程度。归零时游戏结束。可以通过吃饱喝足缓慢恢复。">
+                <span class="label">❤️</span>
+                <div class="progress-bar">
+                    <div id="health-bar" class="fill" style="width: 100%;"></div>
+                    <span id="health-value" class="status-value">100/100</span>
+                </div>
+            </div>
+            <div class="status-item" data-tooltip="饥饿度：随时间流逝。过低会扣除生命。通过搜寻食物并食用恢复。">
+                <span class="label">🍖</span>
+                <div class="progress-bar">
+                    <div id="hunger-bar" class="fill" style="width: 100%;"></div>
+                    <span id="hunger-value" class="status-value">100/100</span>
+                </div>
+            </div>
+            <div class="status-item" data-tooltip="水分：消耗速度比饥饿快。过低会扣除生命。通过寻找淡水恢复。">
+                <span class="label">💧</span>
+                <div class="progress-bar">
+                    <div id="thirst-bar" class="fill" style="width: 100%;"></div>
+                    <span id="thirst-value" class="status-value">100/100</span>
+                </div>
+            </div>
+            <div class="status-item" data-tooltip="精力：进行任何活动都会消耗。通过休息或睡觉恢复。">
+                <span class="label">⚡</span>
+                <div class="progress-bar">
+                    <div id="energy-bar" class="fill" style="width: 100%;"></div>
+                    <span id="energy-value" class="status-value">100/100</span>
+                </div>
+            </div>
+        </header>
+
+        <main id="game-body">
+            <!-- 左侧/中间：环境插图与日志 -->
+            <section id="display-area">
+                <div id="environment-view">
+                    <div id="game-clock">06:00</div>
+                    <div id="scene-icon">🏝️</div>
+                    <div id="scene-name">海滩</div>
+                    <div id="time-info">第 1 天 | 白天</div>
+                    <div id="top-right-controls">
+                        <button id="pause-btn" onclick="game.togglePause()">⏸️</button>
+                        <button id="restart-btn" onclick="game.restart()">🔄</button>
+                    </div>
+                </div>
+                <div id="log-container">
+                    <ul id="game-log">
+                        <li>你在一场海难中幸存，漂流到了这座荒岛...</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 右侧：背包面板 -->
+            <aside id="inventory-panel">
+                <h3>🎒 背包</h3>
+                <div id="inventory-grid">
+                    <!-- 物品将通过 JS 动态生成 -->
+                </div>
+            </aside>
+        </main>
+
+        <!-- 底部动作面板 -->
+        <footer id="action-panel">
+            <div class="action-group">
+                <button onclick="game.collect('wood')">🪵 砍树</button>
+                <button onclick="game.collect('food')">🥩 搜寻食物</button>
+                <button onclick="game.collect('water')">💧 寻找水源</button>
+                <button onclick="game.explore()">🧭 探索</button>
+            </div>
+            <div class="action-group">
+                <button onclick="game.showCrafting()">🛠️ 制作</button>
+                <button onclick="game.rest('nap')">🧘 小憩</button>
+                <button onclick="game.rest('sleep')">😴 睡觉</button>
+            </div>
+        </footer>
+
+        <!-- 模态框：制作列表 -->
+        <div id="crafting-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-btn" onclick="game.hideCrafting()">&times;</span>
+                <h2>🛠️ 制作工具</h2>
+                <div id="crafting-list">
+                    <!-- 制作项将通过 JS 动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
