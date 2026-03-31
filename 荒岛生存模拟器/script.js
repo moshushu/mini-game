@@ -1,5 +1,11 @@
 class Game {
     constructor() {
+        // 角色信息
+        this.character = {
+            name: '',
+            gender: 'male'
+        };
+
         // 1. 初始化玩家状态
         this.player = {
             health: 100,
@@ -15,6 +21,7 @@ class Game {
                 bottled_water: 0,
                 cola: 0,
                 coconut: 0,
+                egg: 0,
                 fiber: 0
             },
             tools: []
@@ -39,6 +46,7 @@ class Game {
             bottled_water: { name: '矿泉水', icon: '💧', usable: true, effect: { thirst: 30 } },
             cola: { name: '可乐', icon: '🥤', usable: true, effect: { thirst: 20, energy: 15 } },
             coconut: { name: '椰子', icon: '🥥', usable: true, effect: { thirst: 15, hunger: 10 } },
+            egg: { name: '鸡蛋', icon: '🥚', usable: true, effect: { hunger: 20, energy: 5 } },
             fiber: { name: '纤维', icon: '🧶' },
             axe: { name: '石斧', icon: '🪓' },
             pickaxe: { name: '石镐', icon: '⛏️' }
@@ -66,10 +74,62 @@ class Game {
             timeInfo: document.getElementById('time-info'),
             gameClock: document.getElementById('game-clock'),
             craftingModal: document.getElementById('crafting-modal'),
-            craftingList: document.getElementById('crafting-list')
+            craftingList: document.getElementById('crafting-list'),
+            characterCreation: document.getElementById('character-creation'),
+            gameContainer: document.getElementById('game-container')
         };
 
-        this.init();
+        // 检查是否有存档，如果没有则显示角色创建界面
+        this.checkAndShowCharacterCreation();
+    }
+
+    // 检查并显示角色创建界面
+    checkAndShowCharacterCreation() {
+        const saved = localStorage.getItem('island_survival_save');
+        if (saved) {
+            // 有存档，先加载数据，再初始化游戏
+            this.loadGame();
+            // 确保角色创建界面隐藏，游戏界面显示
+            this.dom.characterCreation.classList.add('hidden');
+            this.dom.gameContainer.classList.remove('hidden');
+            this.init();
+        } else {
+            // 没有存档，显示角色创建界面
+            this.setupCharacterCreation();
+        }
+    }
+
+    // 设置角色创建界面
+    setupCharacterCreation() {
+        const startBtn = document.getElementById('start-game-btn');
+        const nameInput = document.getElementById('player-name');
+
+        startBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                alert('请输入角色名称！');
+                return;
+            }
+
+            const gender = document.querySelector('input[name="gender"]:checked').value;
+            
+            this.character.name = name;
+            this.character.gender = gender;
+
+            // 隐藏角色创建界面，显示游戏界面
+            this.dom.characterCreation.classList.add('hidden');
+            this.dom.gameContainer.classList.remove('hidden');
+
+            // 初始化游戏
+            this.init();
+        });
+
+        // 支持回车键开始游戏
+        nameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startBtn.click();
+            }
+        });
     }
 
     init() {
@@ -80,9 +140,19 @@ class Game {
         // 暂停状态
         this.isPaused = false;
         
-        this.loadGame();
+        // 清理可能存在的旧定时器
+        if (this.gameTimeInterval) {
+            clearInterval(this.gameTimeInterval);
+        }
+        if (this.consumeInterval) {
+            clearInterval(this.consumeInterval);
+        }
+        
         this.updateUI();
-        this.log('欢迎来到荒岛生存模拟器！努力活下去吧。');
+        
+        // 显示欢迎消息，包含角色名称
+        const genderText = this.character.gender === 'male' ? '幸存者' : '幸存者';
+        this.log(`欢迎 ${this.character.name}！你作为一名${genderText}来到了荒岛，努力活下去吧。`);
         
         // 启动游戏时间计时器 - 自动推进时间
         this.gameTimeInterval = setInterval(() => {
@@ -308,7 +378,16 @@ class Game {
                 msg: '夜晚的流星划过天际。你感到心情舒畅，精力有所恢复。',
                 condition: () => this.world.isNight,
                 action: () => {
-                    this.player.energy = Math.min(100, this.player.energy + 10);
+                    this.showMeteorShower();
+                },
+                type: 'event'
+            },
+            {
+                name: '漂流箱',
+                msg: '海边飘来了一个神秘的箱子...',
+                condition: () => this.world.location === '海滩',
+                action: () => {
+                    this.showTreasureBox();
                 },
                 type: 'event'
             }
@@ -322,6 +401,188 @@ class Game {
         this.log(`【事件】${event.msg}`, event.type);
         event.action();
         this.updateUI();
+    }
+
+    // 测试流星事件（用于开发测试）
+    testMeteorShower() {
+        this.log('【测试】触发流星事件...', 'event');
+        this.showMeteorShower();
+    }
+
+    // 显示宝箱动画
+    showTreasureBox() {
+        // 创建宝箱容器
+        const boxContainer = document.createElement('div');
+        boxContainer.className = 'treasure-box-container';
+        boxContainer.innerHTML = `
+            <div class="treasure-box-wrapper">
+                <div class="treasure-box" id="treasure-box">
+                    <div class="box-body">📦</div>
+                    <div class="box-lid">🎁</div>
+                    <div class="box-glow"></div>
+                </div>
+                <div class="click-hint">点击打开宝箱</div>
+            </div>
+        `;
+        document.body.appendChild(boxContainer);
+
+        // 点击宝箱打开
+        const box = boxContainer.querySelector('#treasure-box');
+        box.addEventListener('click', () => {
+            this.openTreasureBox(boxContainer);
+        });
+    }
+
+    // 打开宝箱
+    openTreasureBox(container) {
+        const box = container.querySelector('#treasure-box');
+        const hint = container.querySelector('.click-hint');
+        
+        // 添加打开动画类
+        box.classList.add('opened');
+        hint.textContent = '';
+        
+        // 随机奖励
+        const rewards = [
+            { type: 'canned_food', count: 2, name: '罐头', icon: '🥫' },
+            { type: 'bottled_water', count: 2, name: '矿泉水', icon: '💧' },
+            { type: 'cola', count: 1, name: '可乐', icon: '🥤' },
+            { type: 'coconut', count: 2, name: '椰子', icon: '🥥' },
+            { type: 'fish', count: 3, name: '生鱼', icon: '🐟' },
+            { type: 'berries', count: 5, name: '浆果', icon: '🍒' }
+        ];
+        
+        // 随机选择2-3个奖励
+        const numRewards = Math.floor(Math.random() * 2) + 2;
+        const selectedRewards = [];
+        const rewardCopy = [...rewards];
+        
+        for (let i = 0; i < numRewards && rewardCopy.length > 0; i++) {
+            const index = Math.floor(Math.random() * rewardCopy.length);
+            selectedRewards.push(rewardCopy.splice(index, 1)[0]);
+        }
+        
+        // 显示奖励
+        setTimeout(() => {
+            // 创建奖励展示区域
+            const rewardsContainer = document.createElement('div');
+            rewardsContainer.className = 'rewards-container';
+            
+            let rewardsHtml = '<div class="rewards-title">🎉 获得奖励</div><div class="rewards-list">';
+            selectedRewards.forEach(reward => {
+                this.player.inventory[reward.type] += reward.count;
+                rewardsHtml += `
+                    <div class="reward-item">
+                        <span class="reward-icon">${reward.icon}</span>
+                        <span class="reward-name">${reward.name}</span>
+                        <span class="reward-count">x${reward.count}</span>
+                    </div>
+                `;
+            });
+            rewardsHtml += '</div><button class="close-rewards-btn">收下奖励</button>';
+            
+            rewardsContainer.innerHTML = rewardsHtml;
+            container.querySelector('.treasure-box-wrapper').appendChild(rewardsContainer);
+            
+            // 添加收下奖励按钮事件
+            rewardsContainer.querySelector('.close-rewards-btn').addEventListener('click', () => {
+                container.style.opacity = '0';
+                setTimeout(() => {
+                    container.remove();
+                    this.updateUI();
+                    this.saveGame();
+                }, 300);
+            });
+            
+            // 记录日志
+            const rewardNames = selectedRewards.map(r => `${r.name}x${r.count}`).join('、');
+            this.log(`你打开了漂流箱，获得了：${rewardNames}`, 'event');
+            
+        }, 600);
+    }
+
+    // 显示流星动画
+    showMeteorShower() {
+        // 创建流星容器
+        const meteorContainer = document.createElement('div');
+        meteorContainer.className = 'meteor-container';
+        document.body.appendChild(meteorContainer);
+
+        // 流星数量 - 成群出现
+        const meteorCount = Math.floor(Math.random() * 5) + 8; // 8-12颗流星
+        let meteorsFallen = 0;
+
+        // 创建流星
+        const createMeteor = (index) => {
+            const meteor = document.createElement('div');
+            meteor.className = 'meteor';
+            
+            // 从右上角区域开始（屏幕右上1/4区域）
+            const startX = Math.random() * 25 + 70; // 70-95% 屏幕宽度（右侧）
+            const startY = Math.random() * 25; // 0-25% 屏幕高度（上方）
+            
+            meteor.style.left = `${startX}%`;
+            meteor.style.top = `${startY}%`;
+            
+            // 随机大小和速度
+            const scale = Math.random() * 0.6 + 0.7; // 0.7-1.3
+            const duration = Math.random() * 0.8 + 0.8; // 0.8-1.6秒
+            const delay = Math.random() * 0.5; // 0-0.5秒随机延迟
+            
+            meteor.style.setProperty('--scale', scale);
+            meteor.style.setProperty('--duration', `${duration}s`);
+            meteor.style.setProperty('--delay', `${delay}s`);
+            
+            meteorContainer.appendChild(meteor);
+            
+            // 动画结束后移除
+            setTimeout(() => {
+                meteor.remove();
+                meteorsFallen++;
+                
+                // 所有流星落下后自动恢复精力并关闭
+                if (meteorsFallen === meteorCount) {
+                    setTimeout(() => {
+                        // 自动恢复精力
+                        const energyGain = Math.floor(Math.random() * 10) + 15; // 15-25点精力
+                        this.player.energy = Math.min(100, this.player.energy + energyGain);
+                        
+                        // 显示恢复效果
+                        this.showMeteorEffect(meteorContainer, energyGain);
+                    }, 500);
+                }
+            }, (duration + delay) * 1000);
+        };
+
+        // 快速连续创建流星，形成流星雨效果
+        for (let i = 0; i < meteorCount; i++) {
+            setTimeout(() => createMeteor(i), i * 150);
+        }
+
+        // 记录日志
+        this.log('🌠 流星雨划过夜空！你感到精神振奋。', 'event');
+    }
+
+    // 显示流星效果
+    showMeteorEffect(container, energyGain) {
+        // 创建效果文字
+        const effect = document.createElement('div');
+        effect.className = 'meteor-effect-text';
+        effect.innerHTML = `
+            <div class="effect-icon">✨</div>
+            <div class="effect-value">精力 +${energyGain}</div>
+        `;
+        container.appendChild(effect);
+
+        // 淡出并移除容器
+        setTimeout(() => {
+            container.style.opacity = '0';
+            setTimeout(() => {
+                container.remove();
+                this.updateUI();
+                this.saveGame();
+            }, 500);
+        }, 1200);
     }
 
     checkAction(energyCost) {
@@ -477,27 +738,118 @@ class Game {
     saveGame() {
         const data = {
             player: this.player,
-            world: this.world
+            world: this.world,
+            character: this.character
         };
         localStorage.setItem('island_survival_save', JSON.stringify(data));
     }
 
     loadGame() {
-        const saved = localStorage.getItem('island_survival_save');
-        if (saved) {
-            const data = JSON.parse(saved);
-            this.player = data.player;
-            this.world = data.world;
+        try {
+            const saved = localStorage.getItem('island_survival_save');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data && data.player && data.world) {
+                    this.player = { ...this.player, ...data.player };
+                    this.world = { ...this.world, ...data.world };
+                    if (data.character) {
+                        this.character = { ...this.character, ...data.character };
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('存档加载失败，使用默认设置');
+            localStorage.removeItem('island_survival_save');
         }
     }
 
     gameOver() {
         this.log('💀 你在荒岛上倒下了... 游戏结束。', 'danger');
-        // 可以在这里添加重新开始按钮
-        if (confirm('游戏结束！是否重新开始？')) {
-            localStorage.removeItem('island_survival_save');
-            location.reload();
+        
+        // 停止游戏定时器
+        if (this.gameTimeInterval) {
+            clearInterval(this.gameTimeInterval);
+            this.gameTimeInterval = null;
         }
+        if (this.consumeInterval) {
+            clearInterval(this.consumeInterval);
+            this.consumeInterval = null;
+        }
+        
+        // 延迟显示确认对话框，让玩家看到死亡消息
+        setTimeout(() => {
+            if (confirm('游戏结束！是否重新开始？')) {
+                // 清除存档
+                localStorage.removeItem('island_survival_save');
+                
+                // 重置所有游戏状态
+                this.resetGameState();
+                
+                // 显示角色创建界面，隐藏游戏界面
+                this.dom.gameContainer.classList.add('hidden');
+                this.dom.characterCreation.classList.remove('hidden');
+                
+                // 重置输入框
+                const nameInput = document.getElementById('player-name');
+                if (nameInput) nameInput.value = '';
+                const maleRadio = document.querySelector('input[name="gender"][value="male"]');
+                if (maleRadio) maleRadio.checked = true;
+                
+                // 重新设置角色创建界面事件监听
+                this.setupCharacterCreation();
+            }
+        }, 100);
+    }
+
+    // 重置游戏状态的辅助方法
+    resetGameState() {
+        // 重置玩家状态
+        this.player = {
+            health: 100,
+            hunger: 100,
+            thirst: 100,
+            energy: 100,
+            inventory: {
+                wood: 0,
+                stone: 0,
+                berries: 0,
+                fish: 0,
+                canned_food: 0,
+                bottled_water: 0,
+                cola: 0,
+                coconut: 0,
+                egg: 0,
+                fiber: 0
+            },
+            tools: []
+        };
+        
+        // 重置世界状态
+        this.world = {
+            day: 1,
+            isNight: false,
+            timeInDay: 6,
+            location: '海滩',
+            weather: '晴朗'
+        };
+        
+        // 重置角色信息
+        this.character = {
+            name: '',
+            gender: 'male'
+        };
+        
+        // 重置暂停状态
+        this.isPaused = false;
+        const pauseBtn = document.getElementById('pause-btn');
+        if (pauseBtn) pauseBtn.innerText = '⏸️';
+        
+        // 清空日志
+        this.dom.log.innerHTML = '<li>你在一场海难中幸存，漂流到了这座荒岛...</li>';
+        
+        // 重置场景显示
+        this.dom.sceneIcon.innerText = '🏝️';
+        this.dom.sceneName.innerText = '海滩';
     }
 
     togglePause() {
@@ -532,6 +884,7 @@ class Game {
                     bottled_water: 0,
                     cola: 0,
                     coconut: 0,
+                    egg: 0,
                     fiber: 0
                 },
                 tools: []
@@ -546,6 +899,12 @@ class Game {
                 weather: '晴朗'
             };
             
+            // 重置角色信息
+            this.character = {
+                name: '',
+                gender: 'male'
+            };
+            
             // 重置暂停状态
             this.isPaused = false;
             const pauseBtn = document.getElementById('pause-btn');
@@ -558,14 +917,16 @@ class Game {
             this.dom.sceneIcon.innerText = '🏝️';
             this.dom.sceneName.innerText = '海滩';
             
-            // 显示欢迎消息
-            this.log('你在一场海难中幸存，漂流到了这座荒岛...');
-            this.log('欢迎来到荒岛生存模拟器！努力活下去吧。');
+            // 显示角色创建界面，隐藏游戏界面
+            this.dom.gameContainer.classList.add('hidden');
+            this.dom.characterCreation.classList.remove('hidden');
             
-            // 更新UI
-            this.updateUI();
+            // 重置输入框
+            document.getElementById('player-name').value = '';
+            document.querySelector('input[name="gender"][value="male"]').checked = true;
             
-            this.log('🔄 游戏已重新开始', 'event');
+            // 重新设置角色创建界面
+            this.setupCharacterCreation();
         }
     }
 }
