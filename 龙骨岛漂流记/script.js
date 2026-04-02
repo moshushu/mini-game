@@ -33,13 +33,18 @@ class Game {
 
         // 2. 初始化世界状态
         this.world = {
-            day: 1,
+            year: 1,      // 登岛年数
+            month: 1,     // 当月 (1-12)
+            day: 1,       // 当日 (1-30)
             isNight: false,
-            timeInDay: 0, // 0-24 小时
+            timeInDay: 6, // 0-24 小时，从早上6点开始
             location: '海滩',
             weather: '晴朗',
             building: null // 当前建筑
         };
+        
+        // 时间配置：现实1分钟 = 游戏1小时
+        this.timeScale = 60000; // 60秒 = 1游戏小时
 
         // 3. 定义物品与配方
         this.items = {
@@ -122,7 +127,10 @@ class Game {
             characterAvatar: document.getElementById('character-avatar'),
             characterGenderIcon: document.getElementById('character-gender-icon'),
             characterName: document.getElementById('character-name'),
-            healthBarSmall: document.getElementById('health-bar-small'),
+            characterHp: document.getElementById('character-hp'),
+                        gameClock: document.getElementById('game-clock'),
+                        timeInfo: document.getElementById('time-info'),
+                        lightInfo: document.getElementById('light-info'),
             hungerBarSmall: document.getElementById('hunger-bar-small'),
             thirstBarSmall: document.getElementById('thirst-bar-small'),
             energyBarSmall: document.getElementById('energy-bar-small'),
@@ -170,11 +178,19 @@ class Game {
     setupCharacterCreation() {
         const startBtn = document.getElementById('start-game-btn');
         const nameInput = document.getElementById('player-name');
+
         const genderInputs = document.querySelectorAll('input[name="gender"]');
 
-        // 实时更新角色名称显示
+        // 实时更新角色名称显示，并过滤非法字符
         nameInput.addEventListener('input', () => {
-            const name = nameInput.value.trim();
+            let name = nameInput.value;
+            // 过滤掉标点符号和阿拉伯数字，只保留中文和英文字母
+            name = name.replace(/[0-9\p{P}\p{S}]/gu, '');
+            // 限制长度为5个字符
+            if (name.length > 5) {
+                name = name.slice(0, 5);
+            }
+            nameInput.value = name;
             if (this.dom.characterName) {
                 this.dom.characterName.innerText = name || '幸存者';
             }
@@ -184,7 +200,7 @@ class Game {
         genderInputs.forEach(input => {
             input.addEventListener('change', () => {
                 const gender = document.querySelector('input[name="gender"]:checked').value;
-                const avatar = gender === 'female' ? '♀️' : (gender === 'other' ? '⚧' : '♂️');
+                const avatar = gender === 'female' ? '♀️' : '♂️';
                 if (this.dom.characterGenderIcon) {
                     this.dom.characterGenderIcon.innerText = avatar;
                 }
@@ -258,37 +274,16 @@ class Game {
                 this.saveGame();
             }
         }, this.hourRealTime);
+        
+        // 初始化设置菜单
+        this.setupSettings();
+        
+        // 初始化光线和时间显示
+        this.updateTimeDisplay();
+        this.updateLighting();
     }
 
     // --- 核心动作逻辑 ---
-
-    collect(type) {
-        if (!this.checkAction(10)) return;
-
-        let amount = 0;
-        let msg = '';
-        const isDay = !this.world.isNight;
-
-        switch (type) {
-            case 'wood':
-                amount = this.hasTool('axe') ? 5 : 2;
-                this.player.inventory.wood += amount;
-                msg = `你费力地砍伐了一些树木，获得了 ${amount} 个木头。`;
-                break;
-            case 'stone':
-                amount = this.hasTool('pickaxe') ? 4 : 1;
-                this.player.inventory.stone += amount;
-                msg = `你搜寻周围的碎石，获得了 ${amount} 个石头。`;
-                break;
-
-        }
-
-        this.log(msg);
-        this.advanceTime(1);
-        this.consumeResources(5, 5, 10);
-        this.updateUI();
-        this.saveGame();
-    }
 
     // 定义可探索的地点
     getExploreLocations() {
@@ -446,6 +441,100 @@ class Game {
         this.dom.exploreModal.classList.add('hidden');
     }
 
+    // 初始化设置菜单
+    setupSettings() {
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsMenu = document.getElementById('settings-menu');
+        const pauseBtn = document.getElementById('pause-menu-btn');
+        const saveBtn = document.getElementById('save-game-btn');
+        const newGameBtn = document.getElementById('new-game-btn');
+        const exportBtn = document.getElementById('export-save-btn');
+        const importBtn = document.getElementById('import-save-btn');
+        
+        if (!settingsBtn) return;
+        
+        // 切换菜单显隐
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsMenu.classList.toggle('hidden');
+        });
+        
+        // 点击其他地方关闭菜单
+        document.addEventListener('click', () => {
+            settingsMenu.classList.add('hidden');
+        });
+        
+        settingsMenu.addEventListener('click', (e) => e.stopPropagation());
+        
+        // 暂停/继续游戏
+        pauseBtn.addEventListener('click', () => {
+            this.togglePause();
+            pauseBtn.textContent = this.isPaused ? '▶️ 继续游戏' : '⏸️ 暂停游戏';
+            settingsMenu.classList.add('hidden');
+        });
+        
+        // 保存游戏
+        saveBtn.addEventListener('click', () => {
+            this.saveGame();
+            this.log('💾 游戏已手动保存。', 'event');
+            settingsMenu.classList.add('hidden');
+        });
+        
+        // 新游戏
+        newGameBtn.addEventListener('click', () => {
+            settingsMenu.classList.add('hidden');
+            const confirm = window.confirm('确定要开始新游戏吗？当前进度将丢失。');
+            if (confirm) {
+                localStorage.removeItem('island_survival_save');
+                location.reload();
+            }
+        });
+        
+        // 导出存档
+        exportBtn.addEventListener('click', () => {
+            const saveData = localStorage.getItem('island_survival_save');
+            if (!saveData) {
+                this.log('没有找到存档数据。', 'danger');
+                settingsMenu.classList.add('hidden');
+                return;
+            }
+            const blob = new Blob([saveData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `龙骨岛_存档_${this.character.name || '幸存者'}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.log('📤 存档已导出。', 'event');
+            settingsMenu.classList.add('hidden');
+        });
+        
+        // 导入存档
+        importBtn.addEventListener('click', () => {
+            settingsMenu.classList.add('hidden');
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const data = JSON.parse(ev.target.result);
+                        localStorage.setItem('island_survival_save', JSON.stringify(data));
+                        this.log('📥 存档导入成功，重新加载中…', 'event');
+                        setTimeout(() => location.reload(), 1000);
+                    } catch (err) {
+                        this.log('存档文件无效，请检查文件格式。', 'danger');
+                    }
+                };
+                reader.readAsText(file);
+            });
+            input.click();
+        });
+    }
+
     travelTo(location, parentLocation = null) {
         if (!this.checkAction(location.energyCost || 15)) return;
         
@@ -595,67 +684,6 @@ class Game {
         this.saveGame();
     }
 
-    rest(type) {
-        let hours = type === 'nap' ? 2 : 8;
-        let energyGain = type === 'nap' ? 20 : 60;
-        let healthGain = 0;
-        
-        // 应用建筑效果
-        if (this.world.building) {
-            const building = this.buildings.find(b => b.id === this.world.building);
-            if (building && building.effect) {
-                // 建筑提供额外恢复
-                const multiplier = type === 'sleep' ? 1 : 0.3;
-                if (building.effect.energyRestore) {
-                    energyGain += building.effect.energyRestore * multiplier;
-                }
-                if (building.effect.healthRestore) {
-                    healthGain += building.effect.healthRestore * multiplier;
-                }
-                
-                // 在建筑中休息减少资源消耗
-                if (type === 'sleep') {
-                    this.log(`在${building.name}中休息，恢复效果更佳！`, 'consume');
-                }
-            }
-        } else {
-            if (type === 'sleep') {
-                this.log('露宿野外，休息质量较差...', 'event');
-                energyGain *= 0.7;
-            }
-        }
-        
-        if (type === 'sleep' && !this.world.isNight) {
-            this.log('白天太吵了，你很难睡个好觉。', 'event');
-            energyGain = Math.min(energyGain, 40);
-        }
-
-        this.player.energy = Math.min(100, this.player.energy + energyGain);
-        if (healthGain > 0) {
-            this.player.health = Math.min(100, this.player.health + healthGain);
-        }
-        
-        let logMsg = `你休息了 ${hours} 小时，精力恢复了 ${Math.floor(energyGain)} 点`;
-        if (healthGain > 0) logMsg += `，生命恢复了 ${Math.floor(healthGain)} 点`;
-        this.log(logMsg + '。', 'event');
-        
-        // 建筑减少资源消耗
-        let hungerCost = hours * 2;
-        let thirstCost = hours * 3;
-        if (this.world.building) {
-            const building = this.buildings.find(b => b.id === this.world.building);
-            if (building && building.effect) {
-                if (building.effect.hungerReduce) hungerCost = Math.max(0, hungerCost - building.effect.hungerReduce);
-                if (building.effect.thirstReduce) thirstCost = Math.max(0, thirstCost - building.effect.thirstReduce);
-            }
-        }
-        
-        this.advanceTime(hours);
-        this.consumeResources(hungerCost, thirstCost, 0);
-        this.updateUI();
-        this.saveGame();
-    }
-
     // --- 状态管理 ---
 
     consumeResources(h, t, e) {
@@ -672,7 +700,7 @@ class Game {
                 this.log('你感到极度虚弱，生命正在流逝！', 'danger');
             }
         } else if (this.player.hunger > 80 && this.player.thirst > 80 && this.player.health < 100) {
-            // 饱食度高时缓慢恢复生命
+            // 饱食高时缓慢恢复血量
             this.player.health = Math.min(100, this.player.health + 2);
         }
     }
@@ -685,21 +713,97 @@ class Game {
             this.triggerRandomEvent();
         }
 
-        if (this.world.timeInDay >= 24) {
+        // 处理天数、月份、年份进位
+        while (this.world.timeInDay >= 24) {
             this.world.timeInDay -= 24;
             this.world.day++;
-            this.log(`--- 第 ${this.world.day} 天开始了 ---`, 'event');
+            
+            // 每月30天
+            if (this.world.day > 30) {
+                this.world.day = 1;
+                this.world.month++;
+                
+                // 每年12个月
+                if (this.world.month > 12) {
+                    this.world.month = 1;
+                    this.world.year++;
+                    this.log(`=== 登岛第 ${this.world.year} 年了！===`, 'event');
+                } else {
+                    this.log(`--- 第 ${this.world.month} 个月开始了 ---`, 'event');
+                }
+            } else {
+                this.log(`--- 第 ${this.world.day} 天开始了 ---`, 'event');
+            }
         }
         
         this.world.isNight = (this.world.timeInDay >= 18 || this.world.timeInDay < 6);
-        this.dom.timeInfo.innerText = `第 ${this.world.day} 天 | ${this.world.isNight ? '夜晚' : '白天'}`;
         
-        // 更新时钟显示
+        // 更新时间显示
+        this.updateTimeDisplay();
+        
+        // 更新光线效果
+        this.updateLighting();
+    }
+    
+    // 更新时间和日期显示
+    updateTimeDisplay() {
         const hour = Math.floor(this.world.timeInDay);
         const minute = Math.floor((this.world.timeInDay - hour) * 60);
         const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        if (this.dom.gameClock) {
-            this.dom.gameClock.innerText = timeStr;
+        
+        if (this.dom.timeInfo) {
+            this.dom.timeInfo.innerText = `第${this.world.year}年 ${this.world.month}月${this.world.day}日`;
+        }
+        
+        // 时段和时间合并到 lightInfo
+        if (this.dom.lightInfo) {
+            const currentText = this.dom.lightInfo.innerText;
+            const lightName = currentText.split(' ')[0] || '黎明';
+            this.dom.lightInfo.innerText = `${lightName} ${timeStr}`;
+        }
+    }
+    
+    // 根据时间更新光线效果
+    updateLighting() {
+        const hour = this.world.timeInDay;
+        let lightClass = '';
+        let lightDescription = '';
+        
+        if (hour >= 5 && hour < 8) {
+            // 05:00-07:59 光线渐亮
+            lightClass = 'dawn';
+            lightDescription = '黎明';
+        } else if (hour >= 8 && hour < 12) {
+            // 08:00-11:59 光线充足
+            lightClass = 'morning';
+            lightDescription = '上午';
+        } else if (hour >= 12 && hour < 14) {
+            // 12:00-13:59 光照最强
+            lightClass = 'noon';
+            lightDescription = '正午';
+        } else if (hour >= 14 && hour < 18) {
+            // 14:00-17:59 光线稍弱
+            lightClass = 'afternoon';
+            lightDescription = '下午';
+        } else if (hour >= 18 && hour < 20) {
+            // 18:00-19:59 光线昏黄
+            lightClass = 'dusk';
+            lightDescription = '黄昏';
+        } else {
+            // 20:00-04:59 光线昏暗
+            lightClass = 'night';
+            lightDescription = '夜晚';
+        }
+        
+        // 应用光线类到body
+        document.body.className = lightClass;
+        
+        // 更新光线描述显示（合并时间）
+        if (this.dom.lightInfo) {
+            const hour2 = Math.floor(this.world.timeInDay);
+            const minute2 = Math.floor((this.world.timeInDay - hour2) * 60);
+            const timeStr2 = `${hour2.toString().padStart(2, '0')}:${minute2.toString().padStart(2, '0')}`;
+            this.dom.lightInfo.innerText = `${lightDescription} ${timeStr2}`;
         }
     }
 
@@ -738,16 +842,16 @@ class Game {
                     this.showMeteorShower();
                 },
                 type: 'event'
-            },
-            {
-                name: '漂流箱',
-                msg: '海边飘来了一个神秘的箱子...',
-                condition: () => this.world.location === '海滩',
-                action: () => {
-                    this.showTreasureBox();
-                },
-                type: 'event'
             }
+            // {
+            //     name: '漂流箱',
+            //     msg: '海边飘来了一个神秘的箱子...',
+            //     condition: () => this.world.location === '海滩',
+            //     action: () => {
+            //         this.showTreasureBox();
+            //     },
+            //     type: 'event'
+            // }
         ];
 
         // 过滤满足条件的事件
@@ -874,21 +978,29 @@ class Game {
             const meteor = document.createElement('div');
             meteor.className = 'meteor';
             
-            // 从右上角区域开始（屏幕右上1/4区域）
-            const startX = Math.random() * 25 + 70; // 70-95% 屏幕宽度（右侧）
-            const startY = Math.random() * 25; // 0-25% 屏幕高度（上方）
+            // 从屏幕上方随机位置开始（更广泛的区域）
+            const startX = Math.random() * 60 + 40; // 40-100% 屏幕宽度（右侧到中间）
+            const startY = Math.random() * 40; // 0-40% 屏幕高度（上方）
             
             meteor.style.left = `${startX}%`;
             meteor.style.top = `${startY}%`;
             
             // 随机大小和速度
-            const scale = Math.random() * 0.6 + 0.7; // 0.7-1.3
-            const duration = Math.random() * 0.8 + 0.8; // 0.8-1.6秒
-            const delay = Math.random() * 0.5; // 0-0.5秒随机延迟
+            const scale = Math.random() * 0.5 + 0.8; // 0.8-1.3
+            const duration = Math.random() * 0.6 + 1.0; // 1.0-1.6秒
+            const delay = Math.random() * 0.3; // 0-0.3秒随机延迟
+            
+            // 随机角度（25-50度）和距离
+            const angle = Math.random() * 25 + 25; // 25-50度
+            const distanceX = -(Math.random() * 200 + 350); // -350 到 -550px
+            const distanceY = Math.random() * 200 + 350; // 350 到 550px
             
             meteor.style.setProperty('--scale', scale);
             meteor.style.setProperty('--duration', `${duration}s`);
             meteor.style.setProperty('--delay', `${delay}s`);
+            meteor.style.setProperty('--angle', `${angle}deg`);
+            meteor.style.setProperty('--distance-x', `${distanceX}px`);
+            meteor.style.setProperty('--distance-y', `${distanceY}px`);
             
             meteorContainer.appendChild(meteor);
             
@@ -968,7 +1080,7 @@ class Game {
         if (item.effect) {
             for (const [stat, value] of Object.entries(item.effect)) {
                 this.player[stat] = Math.min(100, this.player[stat] + value);
-                const statNames = { hunger: '饱食度', thirst: '水分', energy: '精力', health: '生命值' };
+                const statNames = { hunger: '饱食', thirst: '水分', energy: '精力', health: '血量' };
                 const sign = value >= 0 ? '+' : '';
                 msg += ` ${statNames[stat]}${sign}${value}`;
             }
@@ -985,7 +1097,7 @@ class Game {
         // 更新左侧角色面板
         if (this.dom.characterAvatar && this.dom.characterName) {
             // 更新头像（根据性别）
-            const avatar = this.character.gender === 'female' ? '♀️' : (this.character.gender === 'other' ? '⚧' : '♂️');
+            const avatar = this.character.gender === 'female' ? '♀️' : '♂️';
             this.dom.characterAvatar.innerText = avatar;
             // 更新性别图标
             if (this.dom.characterGenderIcon) {
@@ -995,14 +1107,13 @@ class Game {
             this.dom.characterName.innerText = this.character.name || '幸存者';
         }
         
-        // 更新左侧状态条
-        if (this.dom.healthBarSmall) {
-            this.dom.healthBarSmall.style.width = `${this.player.health}%`;
-            this.dom.healthBarSmall.parentElement.nextElementSibling.textContent = `生命值 ${Math.floor(this.player.health)}%`;
+        // 更新角色名右侧的血量显示
+        if (this.dom.characterHp) {
+            this.dom.characterHp.textContent = `❤️ ${Math.floor(this.player.health)}/100`;
         }
         if (this.dom.hungerBarSmall) {
             this.dom.hungerBarSmall.style.width = `${this.player.hunger}%`;
-            this.dom.hungerBarSmall.parentElement.nextElementSibling.textContent = `饱食度 ${Math.floor(this.player.hunger)}%`;
+            this.dom.hungerBarSmall.parentElement.nextElementSibling.textContent = `饱食 ${Math.floor(this.player.hunger)}%`;
         }
         if (this.dom.thirstBarSmall) {
             this.dom.thirstBarSmall.style.width = `${this.player.thirst}%`;

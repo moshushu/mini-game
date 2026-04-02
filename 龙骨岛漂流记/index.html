@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>荒岛生存模拟器</title>
+    <title>龙骨岛漂流记</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- 角色创建界面 -->
     <div id="character-creation" class="character-creation">
         <div class="creation-content">
-            <h1>🏝️ 荒岛生存模拟器</h1>
+            <h1>🏝️ 龙骨岛漂流记</h1>
             <h2>创建你的角色</h2>
             
             <div class="form-group">
                 <label for="player-name">角色名称：</label>
-                <input type="text" id="player-name" placeholder="请输入你的名字" maxlength="10">
+                <input type="text" id="player-name" placeholder="请输入你的名字" maxlength="5" pattern="[\u4e00-\u9fa5a-zA-Z]*">
             </div>
             
             <div class="form-group">
@@ -29,10 +29,6 @@
                         <input type="radio" name="gender" value="male">
                         <span class="gender-btn">♂️ 男性</span>
                     </label>
-                    <label class="gender-option">
-                        <input type="radio" name="gender" value="other">
-                        <span class="gender-btn">⚧ 双性</span>
-                    </label>
                 </div>
             </div>
             
@@ -41,35 +37,46 @@
     </div>
 
     <div id="game-container" class="hidden">
+        <!-- 顶部时间信息栏 -->
+        <div id="time-bar">
+            <div id="time-display">
+                <span id="time-info">第1年 1月1日</span>
+                <span id="light-info">黎明 06:00</span>
+            </div>
+            <!-- 设置按钮 -->
+            <button id="settings-btn" class="icon-btn" title="设置">⚙️</button>
+        </div>
+        
+        <!-- 设置菜单 -->
+        <div id="settings-menu" class="settings-menu hidden">
+            <div class="settings-item" id="pause-menu-btn">⏸️ 暂停游戏</div>
+            <div class="settings-item" id="save-game-btn">💾 保存游戏</div>
+            <div class="settings-item" id="new-game-btn">🎮 新游戏</div>
+            <div class="settings-item" id="export-save-btn">📤 导出存档</div>
+            <div class="settings-item" id="import-save-btn">📥 导入存档</div>
+        </div>
         <main id="game-body">
             <!-- 左侧：角色信息与状态栏 -->
             <aside id="character-panel">
                 <div id="character-info">
                     <div id="character-name-row">
-                        <span id="character-gender-icon">⚧</span>
+                        <span id="character-gender-icon">♀️</span>
                         <span id="character-name">幸存者</span>
+                        <span id="character-hp">❤️ 100/100</span>
                     </div>
                 </div>
                 <div id="status-list">
-                    <div class="status-row" data-tooltip="生命值：代表你的健康程度。归零时游戏结束。可以通过吃饱喝足缓慢恢复。">
-                        <span class="status-icon">❤️</span>
-                        <div class="status-bar-wrap">
-                            <div class="status-bar-small">
-                                <div id="health-bar-small" class="fill" style="width: 100%;"></div>
-                            </div>
-                            <span class="status-text">生命值</span>
-                        </div>
-                    </div>
-                    <div class="status-row" data-tooltip="饱食度：随时间流逝。过低会扣除生命。通过搜寻食物并食用恢复。">
+
+                    <div class="status-row" data-tooltip="饱食：随时间流逝。过低会扣除血量。通过搜寻食物并食用恢复。">
                         <span class="status-icon">🍖</span>
                         <div class="status-bar-wrap">
                             <div class="status-bar-small">
                                 <div id="hunger-bar-small" class="fill" style="width: 100%;"></div>
                             </div>
-                            <span class="status-text">饱食度</span>
+                            <span class="status-text">饱食</span>
                         </div>
                     </div>
-                    <div class="status-row" data-tooltip="水分：消耗速度比饱食度快。过低会扣除生命。通过寻找淡水恢复。">
+                    <div class="status-row" data-tooltip="水分：消耗速度比饱食快。过低会扣除血量。通过寻找淡水恢复。">
                         <span class="status-icon">💧</span>
                         <div class="status-bar-wrap">
                             <div class="status-bar-small">
@@ -100,15 +107,10 @@
             <!-- 中间：环境插图与日志 -->
             <section id="display-area">
                 <div id="environment-view">
-                    <div id="game-clock">06:00</div>
                     <div id="scene-icon">🏝️</div>
                     <div id="scene-name">海滩</div>
                     <div id="building-display"></div>
-                    <div id="time-info">第 1 天 | 白天</div>
-                    <div id="top-right-controls">
-                        <button id="pause-btn" onclick="game.togglePause()">⏸️</button>
-                        <button id="restart-btn" onclick="game.restart()">🔄</button>
-                    </div>
+
                 </div>
                 <div id="log-container">
                     <ul id="game-log">
@@ -123,16 +125,12 @@
         <!-- 底部动作面板 -->
         <footer id="action-panel">
             <div class="action-group">
-                <button onclick="game.collect('wood')">🪵 砍树</button>
-                <button onclick="game.collect('stone')">🪨 采石</button>
                 <button onclick="game.explore()">🧭 探索</button>
             </div>
 
             <div class="action-group">
                 <button onclick="game.showCrafting()">🛠️ 制作</button>
                 <button onclick="game.showBuilding()">🏗️ 建造</button>
-                <button onclick="game.rest('nap')">🧘 小憩</button>
-                <button onclick="game.rest('sleep')">😴 睡觉</button>
             </div>
             <!-- 测试按钮：测试流星事件 -->
             <div class="action-group test-group">
